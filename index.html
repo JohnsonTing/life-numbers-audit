@@ -52,6 +52,7 @@ label{font-size:13px;color:var(--mut)}
 .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .pill{font:500 12px system-ui,sans-serif;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mut);cursor:pointer}
 .pill.ok{color:var(--ok)}
+.catrow{display:flex;gap:8px;align-items:center}.catrow input{margin:3px 0}.catrow input[type=color]{width:44px;height:40px;padding:2px;flex:none}
 .acct{display:flex;align-items:center;gap:10px;margin-bottom:8px}.acct .d{width:10px;height:10px;border-radius:50%;background:var(--ok);flex:none}
 </style>
 </head>
@@ -60,7 +61,8 @@ label{font-size:13px;color:var(--mut)}
 <nav id="nav"></nav>
 <script>
 /* ---------- config ---------- */
-const ACTS=[["Sleep","#6366f1"],["Eating","#f59e0b"],["Transport","#64748b"],["Demo prep","#0ea5e9"],["Client calls","#10b981"],["Cold calling","#ef4444"],["Email","#8b5cf6"],["Doomscrolling","#ec4899"],["YouTube","#f43f5e"],["Going out","#14b8a6"],["Everything else","#94a3b8"],["Daydreaming/Self Talking","#a855f7"],["Writing","#84cc16"]];
+// Starting activity list; index = category key, so existing entries keep their meaning.
+const DEFAULT_ACTS=[["Sleep","#6366f1"],["Eating","#f59e0b"],["Transport","#64748b"],["Demo prep","#0ea5e9"],["Client calls","#10b981"],["Cold calling","#ef4444"],["Email","#8b5cf6"],["Doomscrolling","#ec4899"],["YouTube","#f43f5e"],["Going out","#14b8a6"],["Everything else","#94a3b8"],["Daydreaming/Self Talking","#a855f7"],["Writing","#84cc16"]];
 const COLD=[["dial","Dials"],["pickup","Picked up"],["gate","Got through"],["pitch","Pitched"],["booked","Demo booked"]];
 const SALES=[["showed","Showed up"],["qualified","Qualified"],["volume","Has volume"],["offer","Offer made"],["closed","Closed"]];
 const OBJ=[["obj_think","\"Want to think about it\""],["obj_time","\"Not the right time\""],["obj_price","Price"],["obj_other","Other objection"]];
@@ -69,7 +71,11 @@ const SB_URL="https://mhzhbhodcefaneojjmca.supabase.co",SB_KEY="sb_publishable_N
 
 /* ---------- state ---------- */
 let S=load();
-function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s){s.cfg=s.cfg||{};return s}}catch(e){}return{entries:[],counts:[],cfg:{volume:100,deal:0}}}
+function load(){let s;try{s=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+ s=s||{entries:[],counts:[],cfg:{volume:100,deal:0}};s.cfg=s.cfg||{};
+ // Seed defaults as "never edited" (epoch, not dirty) so any saved version on the server wins
+ if(!s.cats)s.cats=DEFAULT_ACTS.map(([name,color],i)=>({key:i,name,color,sort:i,deleted:0,updated:new Date(0).toISOString()}));
+ return s}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 const uid=()=>crypto.randomUUID?crypto.randomUUID():"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c=="x"?r:r&3|8).toString(16)});
 const now=()=>new Date().toISOString();
@@ -84,12 +90,24 @@ function tap(f,stage){S.counts.push({id:uid(),funnel:f,stage,ts:now(),updated:no
 function undo(f){const l=S.counts.filter(c=>c.funnel==f&&!c.deleted).sort((a,b)=>b.ts>a.ts?1:-1)[0];if(l){l.deleted=1;l.updated=now();l.dirty=1;commit()}}
 function delEntry(id){const e=S.entries.find(x=>x.id==id);if(e){e.deleted=1;e.updated=now();e.dirty=1;commit()}}
 function commit(){save();render();sync()}
+const cats=()=>S.cats.filter(c=>!c.deleted).sort((a,b)=>a.sort-b.sort);
+const catName=k=>{const c=S.cats.find(c=>c.key==k);return c?c.name:"Unknown"};
+const PALETTE=["#6366f1","#f59e0b","#0ea5e9","#10b981","#ef4444","#8b5cf6","#ec4899","#14b8a6","#84cc16","#f97316","#a855f7","#64748b"];
+function addCat(){const name=nc.value.trim().slice(0,40);if(!name)return;
+ let key;do key=1000+Math.floor(Math.random()*2e9);while(S.cats.some(c=>c.key==key));
+ const used=S.cats.filter(c=>!c.deleted).map(c=>c.color);
+ S.cats.push({key,name,color:PALETTE.find(c=>!used.includes(c))||PALETTE[S.cats.length%PALETTE.length],sort:Math.max(-1,...S.cats.map(c=>c.sort))+1,deleted:0,updated:now(),dirty:1});commit()}
+function editCat(k,f,v){const c=S.cats.find(c=>c.key==k);if(!c)return;if(f=="name"){v=v.trim().slice(0,40);if(!v)return render()}
+ c[f]=v;c.updated=now();c.dirty=1;commit()}
+function delCat(k){const c=S.cats.find(c=>c.key==k);if(!c||!confirm(`Delete "${c.name}"? Time already logged stays in your history.`))return;
+ const a=active();if(a&&a.act==k)stopActive();
+ c.deleted=1;c.updated=now();c.dirty=1;commit()}
 
 /* ---------- range math ---------- */
 function bounds(){const n=new Date(),s=new Date(n);s.setHours(0,0,0,0);
  if(range=="7d")s.setDate(s.getDate()-6);if(range=="30d")s.setDate(s.getDate()-29);return[s,n]}
-function hoursByAct(){const[from,to]=bounds();const h=Array(ACTS.length).fill(0);
- liveEntries().forEach(e=>{const a=Math.max(new Date(e.start),from),b=Math.min(e.end?new Date(e.end):to,to);if(b>a)h[e.act]+=(b-a)/36e5});return h}
+function hoursByAct(){const[from,to]=bounds();const h={};
+ liveEntries().forEach(e=>{const a=Math.max(new Date(e.start),from),b=Math.min(e.end?new Date(e.end):to,to);if(b>a)h[e.act]=(h[e.act]||0)+(b-a)/36e5});return h}
 function counts(f){const[from,to]=bounds();const o={};
  S.counts.filter(c=>!c.deleted&&c.funnel==f&&new Date(c.ts)>=from&&new Date(c.ts)<=to).forEach(c=>o[c.stage]=(o[c.stage]||0)+1);return o}
 const pct=(a,b)=>b?Math.round(a/b*100)+"%":"–";
@@ -98,10 +116,10 @@ const fdur=ms=>{const s=Math.floor(ms/1000);return[Math.floor(s/3600),Math.floor
 
 /* ---------- views ---------- */
 function vTimer(){const a=active();
- let h=`<h1 class="hd">Timer${pill()}</h1><div class="card now"><div><div class="mut">${a?"Now tracking":"Nothing running"}</div><div><b>${a?ACTS[a.act][0]:"Tap an activity"}</b></div></div><div class="big" id="el">${a?fdur(Date.now()-new Date(a.start)):"00:00:00"}</div>${a?`<button class="btn sec" onclick="startAct(${a.act})">Stop</button>`:""}</div>`;
- h+=`<div class="grid g3">`+ACTS.map((x,i)=>`<button class="act ${a&&a.act==i?"on":""}" style="--c:${x[1]}" onclick="startAct(${i})"><span class="dot"></span><small>${i+1}</small><b>${x[0]}</b></button>`).join("")+`</div>`;
- h+=`<h2>Add a past entry</h2><div class="card"><select id="pa">${ACTS.map((x,i)=>`<option value="${i}">${i+1}. ${x[0]}</option>`).join("")}</select><label>Start</label><input type="datetime-local" id="ps"><label>End</label><input type="datetime-local" id="pe"><button class="btn" onclick="addPast()">Add</button></div>`;
- h+=`<h2>Recent</h2><div class="card">`+(liveEntries().sort((a,b)=>b.start>a.start?1:-1).slice(0,15).map(e=>`<div class="log"><span><b>${ACTS[e.act][0]}</b> <span class="mut">${new Date(e.start).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"})} · ${e.end?fh((new Date(e.end)-new Date(e.start))/36e5):"running"}</span></span><button class="btn sec" onclick="delEntry('${e.id}')">✕</button></div>`).join("")||`<div class="mut">No entries yet.</div>`)+`</div>`;
+ let h=`<h1 class="hd">Timer${pill()}</h1><div class="card now"><div><div class="mut">${a?"Now tracking":"Nothing running"}</div><div><b>${a?esc(catName(a.act)):"Tap an activity"}</b></div></div><div class="big" id="el">${a?fdur(Date.now()-new Date(a.start)):"00:00:00"}</div>${a?`<button class="btn sec" onclick="startAct(${a.act})">Stop</button>`:""}</div>`;
+ h+=cats().length?`<div class="grid g3">`+cats().map((x,i)=>`<button class="act ${a&&a.act==x.key?"on":""}" style="--c:${x.color}" onclick="startAct(${x.key})"><span class="dot"></span><small>${i+1}</small><b>${esc(x.name)}</b></button>`).join("")+`</div>`:`<div class="card mut">No activities yet. Add some in <a href="#" onclick="tab='set';render();return false">Settings</a>.</div>`;
+ h+=`<h2>Add a past entry</h2><div class="card"><select id="pa">${cats().map((x,i)=>`<option value="${x.key}">${i+1}. ${esc(x.name)}</option>`).join("")}</select><label>Start</label><input type="datetime-local" id="ps"><label>End</label><input type="datetime-local" id="pe"><button class="btn" onclick="addPast()">Add</button></div>`;
+ h+=`<h2>Recent</h2><div class="card">`+(liveEntries().sort((a,b)=>b.start>a.start?1:-1).slice(0,15).map(e=>`<div class="log"><span><b>${esc(catName(e.act))}</b> <span class="mut">${new Date(e.start).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"})} · ${e.end?fh((new Date(e.end)-new Date(e.start))/36e5):"running"}</span></span><button class="btn sec" onclick="delEntry('${e.id}')">✕</button></div>`).join("")||`<div class="mut">No entries yet.</div>`)+`</div>`;
  return h}
 function addPast(){const a=+pa.value,s=ps.value,e=pe.value;if(!s||!e||new Date(e)<=new Date(s))return alert("Set a valid start and end");
  S.entries.push({id:uid(),act:a,start:new Date(s).toISOString(),end:new Date(e).toISOString(),updated:now(),dirty:1});commit()}
@@ -117,14 +135,15 @@ function vCalls(){
  return h}
 
 function vDash(){
- const hrs=hoursByAct(),tot=hrs.reduce((a,b)=>a+b,0),[from,to]=bounds(),span=(to-from)/36e5;
+ const hrs=hoursByAct(),hr=k=>hrs[k]||0,tot=Object.values(hrs).reduce((a,b)=>a+b,0),[from,to]=bounds(),span=(to-from)/36e5;
  const cc=counts("cold"),sc=counts("sales"),g=k=>cc[k]||0,s=k=>sc[k]||0;
  let h=`<h1>Dashboard</h1><div class="seg">${["today","7d","30d"].map(r=>`<button class="btn ${range==r?"":"sec"}" onclick="range='${r}';render()">${r=="today"?"Today":r}</button>`).join("")}</div>`;
  h+=`<h2>Where the hours went</h2><div class="card">`;
- const max=Math.max(...hrs,.01);
- h+=ACTS.map((x,i)=>`<div class="bar"><span class="nm">${i+1}. ${x[0]}</span><span class="tr"><span class="fl" style="display:block;width:${hrs[i]/max*100}%;background:${x[1]}"></span></span><span class="v">${fh(hrs[i])}</span></div>`).join("");
+ // include deleted activities that still have time in this range
+ const shown=S.cats.filter(c=>!c.deleted||hr(c.key)>0).sort((a,b)=>a.sort-b.sort),max=Math.max(...shown.map(c=>hr(c.key)),.01);
+ h+=shown.map(x=>`<div class="bar"><span class="nm">${esc(x.name)}</span><span class="tr"><span class="fl" style="display:block;width:${hr(x.key)/max*100}%;background:${x.color}"></span></span><span class="v">${fh(hr(x.key))}</span></div>`).join("");
  h+=`<div class="mut" style="margin-top:8px">Tracked ${fh(tot)} of ${fh(span)} · untracked ${fh(Math.max(0,span-tot))} (${pct(Math.max(0,span-tot),span)})</div></div>`;
- const coldH=hrs[5],saleH=hrs[3]+hrs[4]+hrs[5];
+ const coldH=hr(5),saleH=hr(3)+hr(4)+hr(5); // default keys: Demo prep, Client calls, Cold calling
  h+=`<h2>Cold calling funnel</h2><div class="card">`+COLD.map(([k,l],i)=>`<div class="stage"><span>${i+1}. ${l}</span><span><b>${g(k)}</b> <span class="p">${i?pct(g(k),g(COLD[i-1][0])):""}</span></span></div>`).join("")+`</div>`;
  h+=`<div class="card kpi"><div><b>${coldH>=0.1?(g("dial")/coldH).toFixed(1):"–"}</b><span>dials / hour</span></div><div><b>${g("booked")&&coldH>=0.1?fh(coldH/g("booked")):"–"}</b><span>cold-call time per booked demo</span></div><div><b>${g("booked")?Math.round(g("dial")/g("booked")):"–"}</b><span>dials per booked demo</span></div><div><b>${pct(g("booked"),g("dial"))}</b><span>dial → booked</span></div></div>`;
  h+=`<h2>Sales funnel</h2><div class="card"><div class="stage"><span>Demos booked (from cold)</span><b>${g("booked")}</b></div>`+SALES.map(([k,l],i)=>{const prev=i?s(SALES[i-1][0]):g("booked");const lab=k=="volume"?`Has ${S.cfg.volume}+ calls/mo`:l;return`<div class="stage"><span>${i+1}. ${lab}</span><span><b>${s(k)}</b> <span class="p">${pct(s(k),prev)}</span></span></div>`}).join("")+`</div>`;
@@ -140,14 +159,17 @@ function vAcct(){
  if(me===undefined)return`<div class="card mut" id="sbst">${sbState||"Checking sign-in…"}</div>`;
  if(me)return`<div class="card"><div class="acct"><span class="d"></span><div><b>Signed in</b><div class="mut">${esc(me)}</div></div></div><div class="mut" id="sbst">${sbState}</div><div class="row" style="margin-top:10px"><button class="btn sec" onclick="sync(true)">Sync now</button><button class="btn sec" onclick="signOut()">Sign out</button></div></div>`;
  return`<div class="card"><div class="mut" style="margin-bottom:8px">Sign in to back up your data and use it on other devices. Without an account, data stays on this device only.</div><label>Email</label><input id="se" type="email" autocomplete="username"><label>Password</label><input id="sp" type="password" autocomplete="current-password"><div class="mut" id="sbst" style="min-height:18px;margin:4px 0">${sbState}</div><div class="row"><button class="btn" onclick="auth('in')">Sign in</button><button class="btn sec" onclick="auth('up')">Create account</button></div></div>`}
+function vCats(){
+ return`<div class="card">`+cats().map(c=>`<div class="catrow"><input type="color" value="${c.color}" onchange="editCat(${c.key},'color',this.value)" aria-label="Color"><input value="${esc(c.name)}" maxlength="40" onchange="editCat(${c.key},'name',this.value)" aria-label="Name"><button class="btn sec" onclick="delCat(${c.key})" aria-label="Delete">✕</button></div>`).join("")+
+ `<div class="catrow" style="margin-top:8px"><input id="nc" placeholder="New activity" maxlength="40" onkeydown="if(event.key=='Enter')addCat()"><button class="btn" onclick="addCat()">Add</button></div></div>`}
 function vSet(){
- return`<h1>Settings</h1><div class="card"><label>Volume threshold (calls/month a client needs)</label><input id="cv" type="number" value="${S.cfg.volume}"><label>Average deal value (£, optional)</label><input id="cd" type="number" value="${S.cfg.deal}"><button class="btn" onclick="saveCfg()">Save</button></div>
+ return`<h1>Settings</h1><h2>Activities</h2>${vCats()}<div class="card"><label>Volume threshold (calls/month a client needs)</label><input id="cv" type="number" value="${S.cfg.volume}"><label>Average deal value (£, optional)</label><input id="cd" type="number" value="${S.cfg.deal}"><button class="btn" onclick="saveCfg()">Save</button></div>
  <h2>Account</h2>${vAcct()}
  <h2>Backup</h2><div class="card row"><button class="btn sec" onclick="exportCSV()">Export CSV</button><button class="btn sec" onclick="exportJSON()">Export JSON</button></div>`}
 function saveCfg(){S.cfg.volume=+cv.value||100;S.cfg.deal=+cd.value||0;save();render()}
 function dl(name,txt,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;a.click()}
 function exportJSON(){dl("lifes-a-numbers-game.json",JSON.stringify(S,null,1),"application/json")}
-function exportCSV(){const r=["type,name,start_or_ts,end"];liveEntries().forEach(e=>r.push(`time,${ACTS[e.act][0]},${e.start},${e.end||""}`));S.counts.filter(c=>!c.deleted).forEach(c=>r.push(`count,${c.funnel}:${c.stage},${c.ts},`));dl("lifes-a-numbers-game.csv",r.join("\n"),"text/csv")}
+function exportCSV(){const r=["type,name,start_or_ts,end"];liveEntries().forEach(e=>r.push(`time,"${catName(e.act).replace(/"/g,'""')}",${e.start},${e.end||""}`));S.counts.filter(c=>!c.deleted).forEach(c=>r.push(`count,${c.funnel}:${c.stage},${c.ts},`));dl("lifes-a-numbers-game.csv",r.join("\n"),"text/csv")}
 
 /* ---------- render ---------- */
 const TABS=[["timer","⏱ Timer"],["calls","📞 Calls"],["dash","📊 Dashboard"],["set","⚙ Settings"]];
@@ -181,10 +203,10 @@ async function auth(mode){
 async function signOut(){try{const c=await client();await c.auth.signOut()}catch(e){}status("Signed out. Data on this device is kept.")}
 // Fetch rows with synced_at >= cursor, 1000 per page (Supabase's max rows per request).
 // Cursor backs off 1 min to catch rows from transactions that committed out of order; re-pulls are harmless.
-async function pull(c,t){
+async function pull(c,t,idcol="id"){
  let out=[];
  for(let i=0;;i+=1000){
-  let q=c.from(t).select("*").order("synced_at").order("id").range(i,i+999);
+  let q=c.from(t).select("*").order("synced_at").order(idcol).range(i,i+999);
   if(S.pull[t])q=q.gte("synced_at",S.pull[t]);
   const{data,error}=await q;if(error)throw error;
   out=out.concat(data);if(data.length<1000)break}
@@ -196,17 +218,21 @@ async function sync(manual){
  try{const c=await client();
   const{data:{session}}=await c.auth.getSession();if(!session){if(manual)status("Not signed in");return}
   const uidv=session.user.id;
-  const dE=S.entries.filter(e=>e.dirty),dC=S.counts.filter(x=>x.dirty);
+  const dK=S.cats.filter(x=>x.dirty),dE=S.entries.filter(e=>e.dirty),dC=S.counts.filter(x=>x.dirty);
+  if(dK.length){const{error}=await c.from("categories").upsert(dK.map(x=>({user_id:uidv,key:x.key,name:x.name,color:x.color,sort:x.sort,deleted:!!x.deleted,updated_at:x.updated})),{onConflict:"user_id,key"});if(error)throw error;dK.forEach(x=>x.dirty=0)}
   if(dE.length){const{error}=await c.from("time_entries").upsert(dE.map(e=>({id:e.id,user_id:uidv,activity:e.act,start_ts:e.start,end_ts:e.end,deleted:!!e.deleted,updated_at:e.updated})));if(error)throw error;dE.forEach(e=>e.dirty=0)}
   if(dC.length){const{error}=await c.from("counts").upsert(dC.map(x=>({id:x.id,user_id:uidv,funnel:x.funnel,stage:x.stage,ts:x.ts,deleted:!!x.deleted,updated_at:x.updated})));if(error)throw error;dC.forEach(x=>x.dirty=0)}
   // pull only rows changed since last sync; cursor is per user so switching accounts starts fresh
   if(!S.pull||S.pull.uid!=uidv)S.pull={uid:uidv};
-  const re=await pull(c,"time_entries"),rc=await pull(c,"counts");
+  const rk=await pull(c,"categories","key"),re=await pull(c,"time_entries"),rc=await pull(c,"counts");
+  rk.forEach(r=>{const l=S.cats.find(x=>x.key==r.key);const n={key:r.key,name:r.name,color:r.color,sort:r.sort,deleted:r.deleted?1:0,updated:r.updated_at};
+   if(!l)S.cats.push(n);else if(!l.dirty&&new Date(r.updated_at)>new Date(l.updated))Object.assign(l,n)});
   re.forEach(r=>{const l=S.entries.find(e=>e.id==r.id);const n={id:r.id,act:r.activity,start:r.start_ts,end:r.end_ts,deleted:r.deleted?1:0,updated:r.updated_at};
    if(!l)S.entries.push(n);else if(!l.dirty&&r.updated_at>l.updated)Object.assign(l,n)});
   rc.forEach(r=>{const l=S.counts.find(e=>e.id==r.id);const n={id:r.id,funnel:r.funnel,stage:r.stage,ts:r.ts,deleted:r.deleted?1:0,updated:r.updated_at};
    if(!l)S.counts.push(n);else if(!l.dirty&&r.updated_at>l.updated)Object.assign(l,n)});
-  save();status("Last synced "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}));if(tab!="set")render()}
+  save();if(tab!="set"||document.activeElement.tagName!="INPUT")render(); // don't wipe half-typed input
+  status("Last synced "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}));}
  catch(e){status("Sync error: "+(e.message||e))}finally{syncing=false}}
 window.addEventListener("online",()=>sync());
 setInterval(()=>sync(),60000);

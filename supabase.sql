@@ -49,3 +49,24 @@ create trigger counts_synced_at before insert or update on counts
 
 create index if not exists time_entries_user_synced on time_entries (user_id, synced_at);
 create index if not exists counts_user_synced on counts (user_id, synced_at);
+
+-- Per-user activity categories. `key` matches time_entries.activity.
+-- Defaults use keys 0..12 (the original fixed list); new ones get random keys so devices never collide.
+create table if not exists categories (
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  key int not null,
+  name text not null,
+  color text not null,
+  sort int not null default 0,
+  deleted boolean not null default false,
+  updated_at timestamptz not null default now(),
+  synced_at timestamptz not null default now(),
+  primary key (user_id, key)
+);
+alter table categories enable row level security;
+create policy "own categories" on categories for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop trigger if exists categories_synced_at on categories;
+create trigger categories_synced_at before insert or update on categories
+  for each row execute function set_synced_at();
+create index if not exists categories_user_synced on categories (user_id, synced_at);
