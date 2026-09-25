@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Life Audit</title>
+<style>
+:root{--bg:#f8fafc;--card:#fff;--tx:#0f172a;--mut:#64748b;--line:#e2e8f0;--acc:#2563eb;--ok:#059669;--bad:#dc2626}
+@media(prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#152036;--tx:#e6edf7;--mut:#8a9bb5;--line:#24324d;--acc:#5b9dff;--ok:#34d399;--bad:#f87171}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:76px}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 12px}h2{font-size:15px;margin:20px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:560px){.grid.g3{grid-template-columns:repeat(3,1fr)}}
+button,select,input{font:inherit;color:inherit}
+.act{border:2px solid var(--line);background:var(--card);border-radius:14px;padding:14px 10px;text-align:left;cursor:pointer;min-height:64px;position:relative}
+.act b{display:block}.act small{color:var(--mut)}
+.act.on{border-color:var(--c);box-shadow:0 0 0 2px var(--c) inset}
+.act .dot{position:absolute;right:10px;top:10px;width:10px;height:10px;border-radius:50%;background:var(--c)}
+.now{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.now .big{font-size:28px;font-variant-numeric:tabular-nums;font-weight:700}
+.btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+.btn.sec{background:transparent;color:var(--tx);border:1px solid var(--line)}
+.btn.bad{background:var(--bad)}
+.cnt{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:12px;text-align:center;cursor:pointer;user-select:none}
+.cnt:active{transform:scale(.97)}
+.cnt .n{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.cnt .l{font-size:13px;color:var(--mut)}
+.cnt .r{font-size:12px;color:var(--acc);min-height:16px}
+.bar{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px}
+.bar .nm{width:120px;flex:none}.bar .tr{flex:1;background:var(--line);border-radius:6px;height:14px;overflow:hidden}
+.bar .fl{height:100%;border-radius:6px}.bar .v{width:64px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+.stage{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}
+.stage:last-child{border:0}.stage .p{color:var(--acc);font-weight:600}
+.kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.kpi div{background:var(--bg);border-radius:10px;padding:10px}
+.kpi b{font-size:20px;display:block}.kpi span{font-size:12px;color:var(--mut)}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;padding:12px 4px;color:var(--mut);cursor:pointer;font-size:13px}
+nav button.on{color:var(--acc);font-weight:700}
+.seg{display:flex;gap:6px;margin-bottom:12px}.seg button{flex:1}
+input,select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px;width:100%;margin:4px 0}
+label{font-size:13px;color:var(--mut)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.log{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.mut{color:var(--mut);font-size:13px}.ok{color:var(--ok)}.bd{color:var(--bad)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav id="nav"></nav>
+<script>
+/* ---------- config ---------- */
+const ACTS=[["Sleep","#6366f1"],["Eating","#f59e0b"],["Transport","#64748b"],["Demo prep","#0ea5e9"],["Client calls","#10b981"],["Cold calling","#ef4444"],["Email","#8b5cf6"],["Doomscrolling","#ec4899"],["YouTube","#f43f5e"],["Going out","#14b8a6"],["Everything else","#94a3b8"]];
+const COLD=[["dial","Dials"],["pickup","Picked up"],["gate","Got through"],["pitch","Pitched"],["booked","Demo booked"]];
+const SALES=[["showed","Showed up"],["qualified","Qualified"],["volume","Has volume"],["offer","Offer made"],["closed","Closed"]];
+const OBJ=[["obj_think","\"Want to think about it\""],["obj_time","\"Not the right time\""],["obj_price","Price"],["obj_other","Other objection"]];
+const KEY="lifeaudit_v1";
+
+/* ---------- state ---------- */
+let S=load();
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s){s.cfg=s.cfg||{};s.cfg.url=s.cfg.url||"https://mhzhbhodcefaneojjmca.supabase.co";s.cfg.key=s.cfg.key||"sb_publishable_NGImshD2p2DA-JIziV0pMQ_hExkTryM";return s}}catch(e){}return{entries:[],counts:[],cfg:{url:"https://mhzhbhodcefaneojjmca.supabase.co",key:"sb_publishable_NGImshD2p2DA-JIziV0pMQ_hExkTryM",volume:100,deal:0}}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const uid=()=>crypto.randomUUID?crypto.randomUUID():"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c=="x"?r:r&3|8).toString(16)});
+const now=()=>new Date().toISOString();
+let tab="timer",range="today",funnel="cold";
+
+/* ---------- data ops ---------- */
+const liveEntries=()=>S.entries.filter(e=>!e.deleted);
+const active=()=>liveEntries().find(e=>!e.end);
+function stopActive(){const a=active();if(a){a.end=now();a.updated=now();a.dirty=1}}
+function startAct(i){const a=active();const same=a&&a.act===i;stopActive();if(!same)S.entries.push({id:uid(),act:i,start:now(),end:null,updated:now(),dirty:1});commit()}
+function tap(f,stage){S.counts.push({id:uid(),funnel:f,stage,ts:now(),updated:now(),dirty:1});commit();if(navigator.vibrate)navigator.vibrate(15)}
+function undo(f){const l=S.counts.filter(c=>c.funnel==f&&!c.deleted).sort((a,b)=>b.ts>a.ts?1:-1)[0];if(l){l.deleted=1;l.updated=now();l.dirty=1;commit()}}
+function delEntry(id){const e=S.entries.find(x=>x.id==id);if(e){e.deleted=1;e.updated=now();e.dirty=1;commit()}}
+function commit(){save();render();sync()}
+
+/* ---------- range math ---------- */
+function bounds(){const n=new Date(),s=new Date(n);s.setHours(0,0,0,0);
+ if(range=="7d")s.setDate(s.getDate()-6);if(range=="30d")s.setDate(s.getDate()-29);return[s,n]}
+function hoursByAct(){const[from,to]=bounds();const h=Array(ACTS.length).fill(0);
+ liveEntries().forEach(e=>{const a=Math.max(new Date(e.start),from),b=Math.min(e.end?new Date(e.end):to,to);if(b>a)h[e.act]+=(b-a)/36e5});return h}
+function counts(f){const[from,to]=bounds();const o={};
+ S.counts.filter(c=>!c.deleted&&c.funnel==f&&new Date(c.ts)>=from&&new Date(c.ts)<=to).forEach(c=>o[c.stage]=(o[c.stage]||0)+1);return o}
+const pct=(a,b)=>b?Math.round(a/b*100)+"%":"–";
+const fh=h=>h>=1?h.toFixed(1)+"h":Math.round(h*60)+"m";
+const fdur=ms=>{const s=Math.floor(ms/1000);return[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(x=>String(x).padStart(2,"0")).join(":")};
+
+/* ---------- views ---------- */
+function vTimer(){const a=active();
+ let h=`<h1>Timer</h1><div class="card now"><div><div class="mut">${a?"Now tracking":"Nothing running"}</div><div><b>${a?ACTS[a.act][0]:"Tap an activity"}</b></div></div><div class="big" id="el">${a?fdur(Date.now()-new Date(a.start)):"00:00:00"}</div>${a?`<button class="btn sec" onclick="startAct(${a.act})">Stop</button>`:""}</div>`;
+ h+=`<div class="grid g3">`+ACTS.map((x,i)=>`<button class="act ${a&&a.act==i?"on":""}" style="--c:${x[1]}" onclick="startAct(${i})"><span class="dot"></span><small>${i+1}</small><b>${x[0]}</b></button>`).join("")+`</div>`;
+ h+=`<h2>Add a past entry</h2><div class="card"><select id="pa">${ACTS.map((x,i)=>`<option value="${i}">${i+1}. ${x[0]}</option>`).join("")}</select><label>Start</label><input type="datetime-local" id="ps"><label>End</label><input type="datetime-local" id="pe"><button class="btn" onclick="addPast()">Add</button></div>`;
+ h+=`<h2>Recent</h2><div class="card">`+(liveEntries().sort((a,b)=>b.start>a.start?1:-1).slice(0,15).map(e=>`<div class="log"><span><b>${ACTS[e.act][0]}</b> <span class="mut">${new Date(e.start).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"})} · ${e.end?fh((new Date(e.end)-new Date(e.start))/36e5):"running"}</span></span><button class="btn sec" onclick="delEntry('${e.id}')">✕</button></div>`).join("")||`<div class="mut">No entries yet.</div>`)+`</div>`;
+ return h}
+function addPast(){const a=+pa.value,s=ps.value,e=pe.value;if(!s||!e||new Date(e)<=new Date(s))return alert("Set a valid start and end");
+ S.entries.push({id:uid(),act:a,start:new Date(s).toISOString(),end:new Date(e).toISOString(),updated:now(),dirty:1});commit()}
+
+function vCalls(){
+ let h=`<h1>Calls</h1><div class="seg"><button class="btn ${funnel=="cold"?"":"sec"}" onclick="funnel='cold';render()">Cold calling</button><button class="btn ${funnel=="sales"?"":"sec"}" onclick="funnel='sales';render()">Sales calls</button></div>`;
+ const rg=`<div class="seg">${["today","7d","30d"].map(r=>`<button class="btn ${range==r?"":"sec"}" onclick="range='${r}';render()">${r=="today"?"Today":r}</button>`).join("")}</div>`;
+ const c=counts(funnel),st=funnel=="cold"?COLD:SALES;
+ h+=rg+`<div class="grid g3">`+st.map(([k,l],i)=>{const prev=i?c[st[i-1][0]]||0:0;const lab=k=="volume"?`Has ${S.cfg.volume}+ calls/mo`:l;
+  return`<div class="cnt" onclick="tap('${funnel}','${k}')"><div class="n">${c[k]||0}</div><div class="l">${i+1}. ${lab}</div><div class="r">${i?pct(c[k]||0,prev)+" of prev":"&nbsp;"}</div></div>`}).join("")+`</div>`;
+ if(funnel=="sales"){h+=`<h2>Objections</h2><div class="grid">`+OBJ.map(([k,l])=>`<div class="cnt" onclick="tap('sales','${k}')"><div class="n">${c[k]||0}</div><div class="l">${l}</div></div>`).join("")+`</div>`}
+ h+=`<div class="row" style="margin-top:12px"><button class="btn sec" onclick="undo('${funnel}')">↶ Undo last tap</button></div>`;
+ return h}
+
+function vDash(){
+ const hrs=hoursByAct(),tot=hrs.reduce((a,b)=>a+b,0),[from,to]=bounds(),span=(to-from)/36e5;
+ const cc=counts("cold"),sc=counts("sales"),g=k=>cc[k]||0,s=k=>sc[k]||0;
+ let h=`<h1>Dashboard</h1><div class="seg">${["today","7d","30d"].map(r=>`<button class="btn ${range==r?"":"sec"}" onclick="range='${r}';render()">${r=="today"?"Today":r}</button>`).join("")}</div>`;
+ h+=`<h2>Where the hours went</h2><div class="card">`;
+ const max=Math.max(...hrs,.01);
+ h+=ACTS.map((x,i)=>`<div class="bar"><span class="nm">${i+1}. ${x[0]}</span><span class="tr"><span class="fl" style="display:block;width:${hrs[i]/max*100}%;background:${x[1]}"></span></span><span class="v">${fh(hrs[i])}</span></div>`).join("");
+ h+=`<div class="mut" style="margin-top:8px">Tracked ${fh(tot)} of ${fh(span)} · untracked ${fh(Math.max(0,span-tot))} (${pct(Math.max(0,span-tot),span)})</div></div>`;
+ const coldH=hrs[5],saleH=hrs[3]+hrs[4]+hrs[5];
+ h+=`<h2>Cold calling funnel</h2><div class="card">`+COLD.map(([k,l],i)=>`<div class="stage"><span>${i+1}. ${l}</span><span><b>${g(k)}</b> <span class="p">${i?pct(g(k),g(COLD[i-1][0])):""}</span></span></div>`).join("")+`</div>`;
+ h+=`<div class="card kpi"><div><b>${coldH>=0.1?(g("dial")/coldH).toFixed(1):"–"}</b><span>dials / hour</span></div><div><b>${g("booked")&&coldH>=0.1?fh(coldH/g("booked")):"–"}</b><span>cold-call time per booked demo</span></div><div><b>${g("booked")?Math.round(g("dial")/g("booked")):"–"}</b><span>dials per booked demo</span></div><div><b>${pct(g("booked"),g("dial"))}</b><span>dial → booked</span></div></div>`;
+ h+=`<h2>Sales funnel</h2><div class="card"><div class="stage"><span>Demos booked (from cold)</span><b>${g("booked")}</b></div>`+SALES.map(([k,l],i)=>{const prev=i?s(SALES[i-1][0]):g("booked");const lab=k=="volume"?`Has ${S.cfg.volume}+ calls/mo`:l;return`<div class="stage"><span>${i+1}. ${lab}</span><span><b>${s(k)}</b> <span class="p">${pct(s(k),prev)}</span></span></div>`}).join("")+`</div>`;
+ h+=`<h2>Objections</h2><div class="card">`+OBJ.map(([k,l])=>`<div class="stage"><span>${l}</span><span><b>${s(k)}</b> <span class="mut">${pct(s(k),s("showed"))} of calls</span></span></div>`).join("")+`</div>`;
+ const rev=s("closed")*(+S.cfg.deal||0);
+ h+=`<div class="card kpi"><div><b>${pct(s("closed"),s("showed"))}</b><span>show → closed</span></div><div><b>${s("closed")?fh(saleH/s("closed")):"–"}</b><span>selling hours per closed deal</span></div>${S.cfg.deal>0?`<div><b>£${Math.round(rev).toLocaleString()}</b><span>revenue closed</span></div><div><b>${saleH?"£"+Math.round(rev/saleH):"–"}</b><span>£ per selling hour (prep+clients+cold)</span></div>`:`<div><span>Set avg deal value in Settings for £/hour.</span></div>`}</div>`;
+ return h}
+
+let sbState="Local only (not synced)";
+function vSet(){
+ return`<h1>Settings</h1><div class="card"><label>Volume threshold (calls/month a client needs)</label><input id="cv" type="number" value="${S.cfg.volume}"><label>Average deal value (£, optional)</label><input id="cd" type="number" value="${S.cfg.deal}"><button class="btn" onclick="saveCfg()">Save</button></div>
+ <h2>Sync (Supabase, free tier)</h2><div class="card"><div class="mut" id="sbst">${sbState}</div><label>Project URL</label><input id="su" value="${S.cfg.url}" placeholder="https://xxxx.supabase.co"><label>Anon public key</label><input id="sk" value="${S.cfg.key}"><label>Email</label><input id="se" type="email" autocomplete="username"><label>Password</label><input id="sp" type="password" autocomplete="current-password"><div class="row" style="margin-top:6px"><button class="btn" onclick="auth('in')">Sign in</button><button class="btn sec" onclick="auth('up')">Sign up</button><button class="btn sec" onclick="sync(true)">Sync now</button><button class="btn sec" onclick="signOut()">Sign out</button></div></div>
+ <h2>Backup</h2><div class="card row"><button class="btn sec" onclick="exportCSV()">Export CSV</button><button class="btn sec" onclick="exportJSON()">Export JSON</button></div>`}
+function saveCfg(){S.cfg.volume=+cv.value||100;S.cfg.deal=+cd.value||0;save();render()}
+function dl(name,txt,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;a.click()}
+function exportJSON(){dl("life-audit.json",JSON.stringify(S,null,1),"application/json")}
+function exportCSV(){const r=["type,name,start_or_ts,end"];liveEntries().forEach(e=>r.push(`time,${ACTS[e.act][0]},${e.start},${e.end||""}`));S.counts.filter(c=>!c.deleted).forEach(c=>r.push(`count,${c.funnel}:${c.stage},${c.ts},`));dl("life-audit.csv",r.join("\n"),"text/csv")}
+
+/* ---------- render ---------- */
+const TABS=[["timer","⏱ Timer"],["calls","📞 Calls"],["dash","📊 Dashboard"],["set","⚙ Settings"]];
+function render(){
+ const focus=document.activeElement&&document.activeElement.id;
+ nav.innerHTML=TABS.map(([k,l])=>`<button class="${tab==k?"on":""}" onclick="tab='${k}';render()">${l}</button>`).join("");
+ app.innerHTML={timer:vTimer,calls:vCalls,dash:vDash,set:vSet}[tab]();
+ if(focus&&document.getElementById(focus)&&tab=="set")document.getElementById(focus).focus()}
+setInterval(()=>{const a=active(),el=document.getElementById("el");if(a&&el)el.textContent=fdur(Date.now()-new Date(a.start))},1000);
+
+/* ---------- Supabase sync (optional) ---------- */
+let sb=null,sbLoading=null;
+async function client(){
+ if(!S.cfg.url||!S.cfg.key)return null;
+ if(sb&&sb._u==S.cfg.url)return sb;
+ if(!sbLoading)sbLoading=import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+ const m=await sbLoading;sb=m.createClient(S.cfg.url,S.cfg.key);sb._u=S.cfg.url;return sb}
+function status(t){sbState=t;const e=document.getElementById("sbst");if(e)e.textContent=t}
+async function auth(mode){
+ S.cfg.url=su.value.trim();S.cfg.key=sk.value.trim();save();
+ try{const c=await client();if(!c)return status("Enter URL and key");
+  const r=mode=="up"?await c.auth.signUp({email:se.value,password:sp.value}):await c.auth.signInWithPassword({email:se.value,password:sp.value});
+  if(r.error)return status("Error: "+r.error.message);
+  status(mode=="up"&&!r.data.session?"Check your email to confirm, then sign in":"Signed in");sync(true)}
+ catch(e){status("Error: "+e.message)}}
+async function signOut(){try{const c=await client();if(c)await c.auth.signOut()}catch(e){}status("Signed out")}
+let syncing=false;
+async function sync(manual){
+ if(syncing||!S.cfg.url||!navigator.onLine)return;syncing=true;
+ try{const c=await client();if(!c)return;
+  const{data:{session}}=await c.auth.getSession();if(!session){if(manual)status("Not signed in");return}
+  const uidv=session.user.id;
+  const dE=S.entries.filter(e=>e.dirty),dC=S.counts.filter(x=>x.dirty);
+  if(dE.length){const{error}=await c.from("time_entries").upsert(dE.map(e=>({id:e.id,user_id:uidv,activity:e.act,start_ts:e.start,end_ts:e.end,deleted:!!e.deleted,updated_at:e.updated})));if(error)throw error;dE.forEach(e=>e.dirty=0)}
+  if(dC.length){const{error}=await c.from("counts").upsert(dC.map(x=>({id:x.id,user_id:uidv,funnel:x.funnel,stage:x.stage,ts:x.ts,deleted:!!x.deleted,updated_at:x.updated})));if(error)throw error;dC.forEach(x=>x.dirty=0)}
+  const re=await c.from("time_entries").select("*"),rc=await c.from("counts").select("*");
+  if(re.error)throw re.error;if(rc.error)throw rc.error;
+  re.data.forEach(r=>{const l=S.entries.find(e=>e.id==r.id);const n={id:r.id,act:r.activity,start:r.start_ts,end:r.end_ts,deleted:r.deleted?1:0,updated:r.updated_at};
+   if(!l)S.entries.push(n);else if(!l.dirty&&r.updated_at>l.updated)Object.assign(l,n)});
+  rc.data.forEach(r=>{const l=S.counts.find(e=>e.id==r.id);const n={id:r.id,funnel:r.funnel,stage:r.stage,ts:r.ts,deleted:r.deleted?1:0,updated:r.updated_at};
+   if(!l)S.counts.push(n);else if(!l.dirty&&r.updated_at>l.updated)Object.assign(l,n)});
+  save();status("Synced "+new Date().toLocaleTimeString());if(tab!="set")render()}
+ catch(e){status("Sync error: "+(e.message||e))}finally{syncing=false}}
+window.addEventListener("online",()=>sync());
+setInterval(()=>sync(),60000);
+
+render();sync();
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
