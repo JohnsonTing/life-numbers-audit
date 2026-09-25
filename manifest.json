@@ -1,6 +1,6 @@
 {
-  "name": "Life Audit",
-  "short_name": "Audit",
+  "name": "Life's a Numbers Game",
+  "short_name": "Numbers Game",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

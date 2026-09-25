@@ -6,7 +6,8 @@
 <meta name="theme-color" content="#0f172a">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<title>Life Audit</title>
+<title>Life's a Numbers Game</title>
+<meta name="apple-mobile-web-app-title" content="Numbers Game">
 <style>
 :root{--bg:#f8fafc;--card:#fff;--tx:#0f172a;--mut:#64748b;--line:#e2e8f0;--acc:#2563eb;--ok:#059669;--bad:#dc2626}
 @media(prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#152036;--tx:#e6edf7;--mut:#8a9bb5;--line:#24324d;--acc:#5b9dff;--ok:#34d399;--bad:#f87171}}
@@ -48,6 +49,10 @@ label{font-size:13px;color:var(--mut)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .log{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
 .mut{color:var(--mut);font-size:13px}.ok{color:var(--ok)}.bd{color:var(--bad)}
+.hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pill{font:500 12px system-ui,sans-serif;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mut);cursor:pointer}
+.pill.ok{color:var(--ok)}
+.acct{display:flex;align-items:center;gap:10px;margin-bottom:8px}.acct .d{width:10px;height:10px;border-radius:50%;background:var(--ok);flex:none}
 </style>
 </head>
 <body>
@@ -60,10 +65,11 @@ const COLD=[["dial","Dials"],["pickup","Picked up"],["gate","Got through"],["pit
 const SALES=[["showed","Showed up"],["qualified","Qualified"],["volume","Has volume"],["offer","Offer made"],["closed","Closed"]];
 const OBJ=[["obj_think","\"Want to think about it\""],["obj_time","\"Not the right time\""],["obj_price","Price"],["obj_other","Other objection"]];
 const KEY="lifeaudit_v1";
+const SB_URL="https://mhzhbhodcefaneojjmca.supabase.co",SB_KEY="sb_publishable_NGImshD2p2DA-JIziV0pMQ_hExkTryM";
 
 /* ---------- state ---------- */
 let S=load();
-function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s){s.cfg=s.cfg||{};s.cfg.url=s.cfg.url||"https://mhzhbhodcefaneojjmca.supabase.co";s.cfg.key=s.cfg.key||"sb_publishable_NGImshD2p2DA-JIziV0pMQ_hExkTryM";return s}}catch(e){}return{entries:[],counts:[],cfg:{url:"https://mhzhbhodcefaneojjmca.supabase.co",key:"sb_publishable_NGImshD2p2DA-JIziV0pMQ_hExkTryM",volume:100,deal:0}}}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s){s.cfg=s.cfg||{};return s}}catch(e){}return{entries:[],counts:[],cfg:{volume:100,deal:0}}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 const uid=()=>crypto.randomUUID?crypto.randomUUID():"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c=="x"?r:r&3|8).toString(16)});
 const now=()=>new Date().toISOString();
@@ -92,7 +98,7 @@ const fdur=ms=>{const s=Math.floor(ms/1000);return[Math.floor(s/3600),Math.floor
 
 /* ---------- views ---------- */
 function vTimer(){const a=active();
- let h=`<h1>Timer</h1><div class="card now"><div><div class="mut">${a?"Now tracking":"Nothing running"}</div><div><b>${a?ACTS[a.act][0]:"Tap an activity"}</b></div></div><div class="big" id="el">${a?fdur(Date.now()-new Date(a.start)):"00:00:00"}</div>${a?`<button class="btn sec" onclick="startAct(${a.act})">Stop</button>`:""}</div>`;
+ let h=`<h1 class="hd">Timer${pill()}</h1><div class="card now"><div><div class="mut">${a?"Now tracking":"Nothing running"}</div><div><b>${a?ACTS[a.act][0]:"Tap an activity"}</b></div></div><div class="big" id="el">${a?fdur(Date.now()-new Date(a.start)):"00:00:00"}</div>${a?`<button class="btn sec" onclick="startAct(${a.act})">Stop</button>`:""}</div>`;
  h+=`<div class="grid g3">`+ACTS.map((x,i)=>`<button class="act ${a&&a.act==i?"on":""}" style="--c:${x[1]}" onclick="startAct(${i})"><span class="dot"></span><small>${i+1}</small><b>${x[0]}</b></button>`).join("")+`</div>`;
  h+=`<h2>Add a past entry</h2><div class="card"><select id="pa">${ACTS.map((x,i)=>`<option value="${i}">${i+1}. ${x[0]}</option>`).join("")}</select><label>Start</label><input type="datetime-local" id="ps"><label>End</label><input type="datetime-local" id="pe"><button class="btn" onclick="addPast()">Add</button></div>`;
  h+=`<h2>Recent</h2><div class="card">`+(liveEntries().sort((a,b)=>b.start>a.start?1:-1).slice(0,15).map(e=>`<div class="log"><span><b>${ACTS[e.act][0]}</b> <span class="mut">${new Date(e.start).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"})} · ${e.end?fh((new Date(e.end)-new Date(e.start))/36e5):"running"}</span></span><button class="btn sec" onclick="delEntry('${e.id}')">✕</button></div>`).join("")||`<div class="mut">No entries yet.</div>`)+`</div>`;
@@ -127,15 +133,21 @@ function vDash(){
  h+=`<div class="card kpi"><div><b>${pct(s("closed"),s("showed"))}</b><span>show → closed</span></div><div><b>${s("closed")?fh(saleH/s("closed")):"–"}</b><span>selling hours per closed deal</span></div>${S.cfg.deal>0?`<div><b>£${Math.round(rev).toLocaleString()}</b><span>revenue closed</span></div><div><b>${saleH?"£"+Math.round(rev/saleH):"–"}</b><span>£ per selling hour (prep+clients+cold)</span></div>`:`<div><span>Set avg deal value in Settings for £/hour.</span></div>`}</div>`;
  return h}
 
-let sbState="Local only (not synced)";
+let sbState="";
+function pill(){if(me===undefined)return"";return me?`<button class="pill ok" onclick="tab='set';render()">● Signed in</button>`:`<button class="pill" onclick="tab='set';render()">○ Not signed in</button>`}
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+function vAcct(){
+ if(me===undefined)return`<div class="card mut" id="sbst">${sbState||"Checking sign-in…"}</div>`;
+ if(me)return`<div class="card"><div class="acct"><span class="d"></span><div><b>Signed in</b><div class="mut">${esc(me)}</div></div></div><div class="mut" id="sbst">${sbState}</div><div class="row" style="margin-top:10px"><button class="btn sec" onclick="sync(true)">Sync now</button><button class="btn sec" onclick="signOut()">Sign out</button></div></div>`;
+ return`<div class="card"><div class="mut" style="margin-bottom:8px">Sign in to back up your data and use it on other devices. Without an account, data stays on this device only.</div><label>Email</label><input id="se" type="email" autocomplete="username"><label>Password</label><input id="sp" type="password" autocomplete="current-password"><div class="mut" id="sbst" style="min-height:18px;margin:4px 0">${sbState}</div><div class="row"><button class="btn" onclick="auth('in')">Sign in</button><button class="btn sec" onclick="auth('up')">Create account</button></div></div>`}
 function vSet(){
  return`<h1>Settings</h1><div class="card"><label>Volume threshold (calls/month a client needs)</label><input id="cv" type="number" value="${S.cfg.volume}"><label>Average deal value (£, optional)</label><input id="cd" type="number" value="${S.cfg.deal}"><button class="btn" onclick="saveCfg()">Save</button></div>
- <h2>Sync (Supabase, free tier)</h2><div class="card"><div class="mut" id="sbst">${sbState}</div><label>Project URL</label><input id="su" value="${S.cfg.url}" placeholder="https://xxxx.supabase.co"><label>Anon public key</label><input id="sk" value="${S.cfg.key}"><label>Email</label><input id="se" type="email" autocomplete="username"><label>Password</label><input id="sp" type="password" autocomplete="current-password"><div class="row" style="margin-top:6px"><button class="btn" onclick="auth('in')">Sign in</button><button class="btn sec" onclick="auth('up')">Sign up</button><button class="btn sec" onclick="sync(true)">Sync now</button><button class="btn sec" onclick="signOut()">Sign out</button></div></div>
+ <h2>Account</h2>${vAcct()}
  <h2>Backup</h2><div class="card row"><button class="btn sec" onclick="exportCSV()">Export CSV</button><button class="btn sec" onclick="exportJSON()">Export JSON</button></div>`}
 function saveCfg(){S.cfg.volume=+cv.value||100;S.cfg.deal=+cd.value||0;save();render()}
 function dl(name,txt,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;a.click()}
-function exportJSON(){dl("life-audit.json",JSON.stringify(S,null,1),"application/json")}
-function exportCSV(){const r=["type,name,start_or_ts,end"];liveEntries().forEach(e=>r.push(`time,${ACTS[e.act][0]},${e.start},${e.end||""}`));S.counts.filter(c=>!c.deleted).forEach(c=>r.push(`count,${c.funnel}:${c.stage},${c.ts},`));dl("life-audit.csv",r.join("\n"),"text/csv")}
+function exportJSON(){dl("lifes-a-numbers-game.json",JSON.stringify(S,null,1),"application/json")}
+function exportCSV(){const r=["type,name,start_or_ts,end"];liveEntries().forEach(e=>r.push(`time,${ACTS[e.act][0]},${e.start},${e.end||""}`));S.counts.filter(c=>!c.deleted).forEach(c=>r.push(`count,${c.funnel}:${c.stage},${c.ts},`));dl("lifes-a-numbers-game.csv",r.join("\n"),"text/csv")}
 
 /* ---------- render ---------- */
 const TABS=[["timer","⏱ Timer"],["calls","📞 Calls"],["dash","📊 Dashboard"],["set","⚙ Settings"]];
@@ -147,42 +159,59 @@ function render(){
 setInterval(()=>{const a=active(),el=document.getElementById("el");if(a&&el)el.textContent=fdur(Date.now()-new Date(a.start))},1000);
 
 /* ---------- Supabase sync (optional) ---------- */
-let sb=null,sbLoading=null;
+let sb=null,sbLoading=null,me; // me: undefined = checking, null = signed out, else email
 async function client(){
- if(!S.cfg.url||!S.cfg.key)return null;
- if(sb&&sb._u==S.cfg.url)return sb;
+ if(sb)return sb;
  if(!sbLoading)sbLoading=import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
- const m=await sbLoading;sb=m.createClient(S.cfg.url,S.cfg.key);sb._u=S.cfg.url;return sb}
+ const m=await sbLoading;
+ if(!sb){sb=m.createClient(SB_URL,SB_KEY);sb.auth.onAuthStateChange((ev,s)=>{const e=s?s.user.email:null;if(e!==me){me=e;if(e)sbState="";render()}})}
+ return sb}
 function status(t){sbState=t;const e=document.getElementById("sbst");if(e)e.textContent=t}
+const nice=m=>/invalid login/i.test(m)?"Wrong email or password.":/not confirmed/i.test(m)?"Confirm your email first. Check your inbox (and spam).":/already registered/i.test(m)?"That email already has an account. Sign in instead.":m;
 async function auth(mode){
- S.cfg.url=su.value.trim();S.cfg.key=sk.value.trim();save();
- try{const c=await client();if(!c)return status("Enter URL and key");
-  const r=mode=="up"?await c.auth.signUp({email:se.value,password:sp.value}):await c.auth.signInWithPassword({email:se.value,password:sp.value});
-  if(r.error)return status("Error: "+r.error.message);
-  status(mode=="up"&&!r.data.session?"Check your email to confirm, then sign in":"Signed in");sync(true)}
- catch(e){status("Error: "+e.message)}}
-async function signOut(){try{const c=await client();if(c)await c.auth.signOut()}catch(e){}status("Signed out")}
+ const email=se.value.trim(),pw=sp.value;
+ if(!email||!pw)return status("Enter your email and password.");
+ status(mode=="up"?"Creating account…":"Signing in…");
+ try{const c=await client();
+  const r=mode=="up"?await c.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname}}):await c.auth.signInWithPassword({email,password:pw});
+  if(r.error)return status(nice(r.error.message));
+  if(mode=="up"&&!r.data.session)return status("Almost done. Open the confirmation link sent to "+email+", then sign in here.");
+  sync(true)}
+ catch(e){status(navigator.onLine?"Error: "+e.message:"You're offline. Try again when connected.")}}
+async function signOut(){try{const c=await client();await c.auth.signOut()}catch(e){}status("Signed out. Data on this device is kept.")}
+// Fetch rows with synced_at >= cursor, 1000 per page (Supabase's max rows per request).
+// Cursor backs off 1 min to catch rows from transactions that committed out of order; re-pulls are harmless.
+async function pull(c,t){
+ let out=[];
+ for(let i=0;;i+=1000){
+  let q=c.from(t).select("*").order("synced_at").order("id").range(i,i+999);
+  if(S.pull[t])q=q.gte("synced_at",S.pull[t]);
+  const{data,error}=await q;if(error)throw error;
+  out=out.concat(data);if(data.length<1000)break}
+ if(out.length)S.pull[t]=new Date(new Date(out[out.length-1].synced_at)-60000).toISOString();
+ return out}
 let syncing=false;
 async function sync(manual){
- if(syncing||!S.cfg.url||!navigator.onLine)return;syncing=true;
- try{const c=await client();if(!c)return;
+ if(syncing||!navigator.onLine)return;syncing=true;
+ try{const c=await client();
   const{data:{session}}=await c.auth.getSession();if(!session){if(manual)status("Not signed in");return}
   const uidv=session.user.id;
   const dE=S.entries.filter(e=>e.dirty),dC=S.counts.filter(x=>x.dirty);
   if(dE.length){const{error}=await c.from("time_entries").upsert(dE.map(e=>({id:e.id,user_id:uidv,activity:e.act,start_ts:e.start,end_ts:e.end,deleted:!!e.deleted,updated_at:e.updated})));if(error)throw error;dE.forEach(e=>e.dirty=0)}
   if(dC.length){const{error}=await c.from("counts").upsert(dC.map(x=>({id:x.id,user_id:uidv,funnel:x.funnel,stage:x.stage,ts:x.ts,deleted:!!x.deleted,updated_at:x.updated})));if(error)throw error;dC.forEach(x=>x.dirty=0)}
-  const re=await c.from("time_entries").select("*"),rc=await c.from("counts").select("*");
-  if(re.error)throw re.error;if(rc.error)throw rc.error;
-  re.data.forEach(r=>{const l=S.entries.find(e=>e.id==r.id);const n={id:r.id,act:r.activity,start:r.start_ts,end:r.end_ts,deleted:r.deleted?1:0,updated:r.updated_at};
+  // pull only rows changed since last sync; cursor is per user so switching accounts starts fresh
+  if(!S.pull||S.pull.uid!=uidv)S.pull={uid:uidv};
+  const re=await pull(c,"time_entries"),rc=await pull(c,"counts");
+  re.forEach(r=>{const l=S.entries.find(e=>e.id==r.id);const n={id:r.id,act:r.activity,start:r.start_ts,end:r.end_ts,deleted:r.deleted?1:0,updated:r.updated_at};
    if(!l)S.entries.push(n);else if(!l.dirty&&r.updated_at>l.updated)Object.assign(l,n)});
-  rc.data.forEach(r=>{const l=S.counts.find(e=>e.id==r.id);const n={id:r.id,funnel:r.funnel,stage:r.stage,ts:r.ts,deleted:r.deleted?1:0,updated:r.updated_at};
+  rc.forEach(r=>{const l=S.counts.find(e=>e.id==r.id);const n={id:r.id,funnel:r.funnel,stage:r.stage,ts:r.ts,deleted:r.deleted?1:0,updated:r.updated_at};
    if(!l)S.counts.push(n);else if(!l.dirty&&r.updated_at>l.updated)Object.assign(l,n)});
-  save();status("Synced "+new Date().toLocaleTimeString());if(tab!="set")render()}
+  save();status("Last synced "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}));if(tab!="set")render()}
  catch(e){status("Sync error: "+(e.message||e))}finally{syncing=false}}
 window.addEventListener("online",()=>sync());
 setInterval(()=>sync(),60000);
 
-render();sync();
+render();client().catch(()=>{me=null;status("Can't reach sync server. Your data is saved on this device.");render()});sync();
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 </body>
