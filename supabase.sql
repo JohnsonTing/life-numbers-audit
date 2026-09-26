@@ -70,3 +70,24 @@ drop trigger if exists categories_synced_at on categories;
 create trigger categories_synced_at before insert or update on categories
   for each row execute function set_synced_at();
 create index if not exists categories_user_synced on categories (user_id, synced_at);
+
+-- Per-user tap counters on the Calls tab. `key` matches counts.stage; kind 'step' = funnel step, 'tally' = plain count.
+create table if not exists counters (
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  funnel text not null,
+  key text not null,
+  name text not null,
+  kind text not null default 'tally' check (kind in ('step','tally')),
+  sort int not null default 0,
+  deleted boolean not null default false,
+  updated_at timestamptz not null default now(),
+  synced_at timestamptz not null default now(),
+  primary key (user_id, funnel, key)
+);
+alter table counters enable row level security;
+create policy "own counters" on counters for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop trigger if exists counters_synced_at on counters;
+create trigger counters_synced_at before insert or update on counters
+  for each row execute function set_synced_at();
+create index if not exists counters_user_synced on counters (user_id, synced_at);
